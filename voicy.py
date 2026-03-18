@@ -10,6 +10,7 @@ import sounddevice as sd
 import scipy.io.wavfile as wav
 import numpy as np
 import threading
+import time 
 
 # Load environment variables
 load_dotenv()
@@ -42,7 +43,10 @@ class VoiceAIAgent:
         # Audio recording settings
         self.sample_rate = 44100
         self.channels = 1
-    
+        
+        # timestamp dic
+        self.ts = {}
+        
     def record_and_transcribe(self) -> str:
         """Record audio and transcribe directly from memory — no file saving"""
         print("Press Enter to START recording...")
@@ -70,6 +74,10 @@ class VoiceAIAgent:
         if not recorded_frames:
             print("No audio recorded.")
             return None
+        
+        # input stream done -> time stamp1
+        self.ts["vad_end"] = time.time()
+        print(f"[T1 - VAD done, User finished speaking]        {self.ts['vad_end']:.3f}")
 
         # Combine chunks into single array
         audio_data = np.concatenate(recorded_frames, axis=0).flatten()
@@ -86,6 +94,9 @@ class VoiceAIAgent:
         print(f"You said: {text}")
         return text
         
+        # speech -> text done -> time stamp 2
+        self.ts["stt_done"] = time.time()
+        print(f"[T2 - STT done]        {self.ts['stt_done']:.3f}  |  STT latency: {(self.ts['stt_done'] - self.ts['vad_end']):.3f}s")
     
     def generate_response(self, user_input: str) -> str:
         """Generate LLM response using OpenRouter"""
@@ -94,6 +105,11 @@ class VoiceAIAgent:
         # Append user input to history
         self.conversation_history.append({"role": "user", "content": user_input})
         
+        # Call OpenRouter for response -> time stamp 3 when LLm call starts
+        self.ts["llm_start"] = time.time()
+        print(f"[T3 - LLM call start] {self.ts['llm_start']:.3f}  |  Time since STT done: {(self.ts['llm_start'] - self.ts['stt_done']):.3f}s")
+        
+        
         message = self.llm_client.chat.completions.create(
             model="mistralai/mistral-small-3.2-24b-instruct",
             messages=self.conversation_history
@@ -101,12 +117,20 @@ class VoiceAIAgent:
         response = message.choices[0].message.content
         self.conversation_history.append({"role": "assistant", "content": "You are a voice assistant. Keep all responses concise, short and under 150 words since they will be spoken aloud. Avoid markdown, bullet points, or special characters like ** or * ."})
         print(f"LLM Response: {response}")
+        
+        # time stamp 4: LLM call is done
+        self.ts["llm_done"] = time.time()
+        print(f"[T4 - LLM call done]  {self.ts['llm_done']:.3f}  |  LLM latency: {(self.ts['llm_done'] - self.ts['llm_start']):.3f}s")
         return response
     
     def synthesize_speech(self, text: str, output_path: str = "output.mp3") -> str:
         """Convert text to speech using DeepGram"""
         print("Synthesizing speech...")
-
+        
+        # time stamp 5: TTS call starts
+        self.ts["tts_start"] = time.time()
+        print(f"[T5 - TTS call start] {self.ts['tts_start']:.3f}  |  Time since LLM done: {(self.ts['tts_start'] - self.ts['llm_done']):.3f}s")
+        
         # Deepgram has a 2000 character limit
         if len(text) > 2000:
             text = text[:1997] + "..."
@@ -125,6 +149,11 @@ class VoiceAIAgent:
             print(f" Speech saved to {output_path}")
         else:
             print(f" File not created at {output_path}")
+        
+        # time stamp 6: TTS audio is ready
+        self.ts["tts_done"] = time.time()
+        print(f"[T6 - TTS done]       {self.ts['tts_done']:.3f}  |  TTS latency: {(self.ts['tts_done'] - self   .ts['tts_start']):.3f}s")
+        
         return output_path
     
     def play_audio(self, audio_path: str):
