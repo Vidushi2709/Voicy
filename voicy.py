@@ -38,7 +38,16 @@ class VoiceAIAgent:
         self.deepgram_client = DeepgramClient(api_key=self.deepgram_api_key)
     
         # Initialize conversation history
-        self.conversation_history = []
+        self.conversation_history = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a voice assistant. Keep all responses concise, short and under 150 words "
+                    "since they will be spoken aloud. Avoid markdown, bullet points, or special "
+                    "characters like ** or * ."
+                )
+            }
+        ]
 
         # Audio recording settings
         self.sample_rate = 44100
@@ -92,11 +101,11 @@ class VoiceAIAgent:
         result = self.whisper_model.transcribe(audio_data, fp16=False)
         text = result["text"].strip()
         print(f"You said: {text}")
-        return text
         
         # speech -> text done -> time stamp 2
         self.ts["stt_done"] = time.time()
-        print(f"[T2 - STT done]        {self.ts['stt_done']:.3f}  |  STT latency: {(self.ts['stt_done'] - self.ts['vad_end']):.3f}s")
+        print(f"[T2 - STT done]        {self.ts['stt_done']:.3f}  |  STT latency: {(self.ts['stt_done'] - self.ts['vad_end']):.3f}s")    
+        return text
     
     def generate_response(self, user_input: str) -> str:
         """Generate LLM response using OpenRouter"""
@@ -115,7 +124,7 @@ class VoiceAIAgent:
             messages=self.conversation_history
         )
         response = message.choices[0].message.content
-        self.conversation_history.append({"role": "assistant", "content": "You are a voice assistant. Keep all responses concise, short and under 150 words since they will be spoken aloud. Avoid markdown, bullet points, or special characters like ** or * ."})
+        self.conversation_history.append({"role": "assistant", "content": response})
         print(f"LLM Response: {response}")
         
         # time stamp 4: LLM call is done
@@ -154,6 +163,8 @@ class VoiceAIAgent:
         self.ts["tts_done"] = time.time()
         print(f"[T6 - TTS done]       {self.ts['tts_done']:.3f}  |  TTS latency: {(self.ts['tts_done'] - self   .ts['tts_start']):.3f}s")
         
+        # end to end latency 
+        print(f"[E2E latency]                                   End-to-end latency: {(self.ts['tts_done'] - self.ts['vad_end']):.3f}s")
         return output_path
     
     def play_audio(self, audio_path: str):

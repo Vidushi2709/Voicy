@@ -112,20 +112,30 @@ Browser Mic → Deepgram STT (streaming) → OpenRouter LLM → Deepgram TTS →
 
 ---
 
-## ⚖️ voicy.py vs livekit_voicy.py
+### ⚖️ voicy.py vs livekit_voicy.py
 
-| | `voicy.py` | `livekit_voicy.py` |
-|---|---|---|
-| **Lines of code** | ~150 | ~50 |
-| **Setup** | Just API keys | API keys + LiveKit Cloud |
-| **STT** | Whisper (runs locally) | Deepgram (streaming) |
-| **Turn detection** | Press Enter | Auto VAD (detects silence) |
-| **Latency** | Medium (local processing) | Low (real-time streaming) |
-| **Works over internet** | No (local only) | Yes |
-| **Multi-user** | No | Yes (rooms) |
-| **Best for** | Local use, learning, no infra | Production, demos, real users |
+|                         | `voicy.py`                    | `livekit_voicy.py`            |
+| ----------------------- | ----------------------------- | ----------------------------- |
+| **Lines of code**       | ~150                          | ~50                           |
+| **Setup**               | Just API keys                 | API keys + LiveKit Cloud      |
+| **STT**                 | Whisper (runs locally)        | Deepgram (streaming)          |
+| **Turn detection**      | Press Enter                   | Auto VAD (detects silence)    |
+| **Latency**             | ~13.137s (end-to-end)         | ~3.268s (end-to-end)          |
+| **Works over internet** | No (local only)               | Yes                           |
+| **Multi-user**          | No                            | Yes (rooms)                   |
+| **Best for**            | Local use, learning, no infra | Production, demos, real users |
 
-The LiveKit version reduces ~100 lines of manual audio/recording/playback code down to a single `VoiceAssistant` object — LiveKit handles the entire pipeline automatically.
+---
+
+### ⏱️ Latency Benchmark
+
+* **Local (`voicy.py`)**: End-to-end latency ≈ **13.137 seconds**
+* **LiveKit (`livekit_voicy.py`)**: End-to-end latency ≈ **3.268 seconds**
+
+**Why the difference?**
+
+* Local pipeline has **sequential blocking steps** (record → process → respond).
+* LiveKit uses **streaming + VAD + parallelism**, reducing idle gaps.
 
 ---
 

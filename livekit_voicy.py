@@ -11,9 +11,9 @@ load_dotenv()
 SYSTEM_PROMPT = """You are a voice assistant. Keep all responses concise and under 150 words 
 since they will be spoken aloud. Avoid markdown, bullet points, or special characters like **, . , #, @, & , ^, % , * , ( , ) , { , } , [ , ] , < , > , ? , / , \ , | , " , ' , : , ; , - , _ , = , + , ~ , ` ."""
 
-ts = {}
-
 async def entrypoint(ctx: JobContext):
+    ts = {}
+
     # Connect to the LiveKit room, audio only
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
 
@@ -30,7 +30,6 @@ async def entrypoint(ctx: JobContext):
         # STT: Deepgram transcribes live audio (replaces Whisper)
         stt=deepgram.STT(
             api_key=os.getenv("DEEPGRAM_API_KEY"),
-            http_session=None,  # force fresh session
         ),
 
         # LLM: OpenRouter with conversation history (same as before)
@@ -38,14 +37,12 @@ async def entrypoint(ctx: JobContext):
             model="mistralai/mistral-small-3.2-24b-instruct",
             base_url="https://openrouter.ai/api/v1",
             api_key=os.getenv("OPENROUTER_API_KEY"),
-            http_session=None,  # force fresh session
         ),
 
         # TTS: Deepgram speaks the response (replaces manual MP3 saving)
         tts=deepgram.TTS(
             api_key=os.getenv("DEEPGRAM_API_KEY"),
             model="aura-asteria-en",
-            http_session=None,  # force fresh session
         ),
         chat_ctx=initial_ctx,
     )
@@ -56,15 +53,24 @@ async def entrypoint(ctx: JobContext):
         print(f"[T1 - VAD done]        {ts['vad_end']:.3f}")
  
     # ── Timestamp 2: transcript is ready (STT done) ──────────────────────────
-    def on_user_speech_committed(user_msg):
+    def on_user_speech_committed(*args):
         ts["stt_done"] = time.time()
-        print(f"[T2 - STT done]        {ts['stt_done']:.3f}  |  STT latency: {(ts['stt_done'] - ts['vad_end']):.3f}s")
- 
+        if "vad_end" in ts:
+            print(f"[T2 - STT done]        {ts['stt_done']:.3f}  |  STT latency: {(ts['stt_done'] - ts['vad_end']):.3f}s")
+        else:
+            print(f"[T2 - STT done]        {ts['stt_done']:.3f}  |  vad_end not recorded")
+            
     # ── Timestamp 3: assistant starts speaking (TTS audio begins) ────────────
     def on_agent_started_speaking():
         ts["tts_start"] = time.time()
-        print(f"[T3 - TTS audio start] {ts['tts_start']:.3f}  |  LLM+TTS latency: {(ts['tts_start'] - ts['stt_done']):.3f}s")
-        print(f"                                        End-to-end latency: {(ts['tts_start'] - ts['vad_end']):.3f}s")
+        if "stt_done" in ts:
+            print(f"[T3 - TTS audio start] {ts['tts_start']:.3f}  |  LLM+TTS latency: {(ts['tts_start'] - ts['stt_done']):.3f}s")
+        else:
+            print(f"[T3 - TTS audio start] {ts['tts_start']:.3f}  |  stt_done not recorded")
+        if "vad_end" in ts:
+            print(f"                                        End-to-end latency: {(ts['tts_start'] - ts['vad_end']):.3f}s")
+        else:
+            print(f"                                        End-to-end latency: vad_end not recorded")
  
     # assistant.on starts an event 
     assistant.on("user_stopped_speaking",  on_user_stopped_speaking)
@@ -82,9 +88,6 @@ async def entrypoint(ctx: JobContext):
 if __name__ == "__main__":
     cli.run_app(
         WorkerOptions(
-            entrypoint_fnc=entrypoint,
-            api_key=os.getenv("LIVEKIT_API_KEY"),
-            api_secret=os.getenv("LIVEKIT_API_SECRET"),
-            ws_url=os.getenv("LIVEKIT_URL"),
+            entrypoint_fnc=entrypoint
         )
     )
